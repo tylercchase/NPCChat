@@ -1,5 +1,5 @@
 from typing import Literal
-import openai
+from openai import AsyncOpenAI
 import discord
 from discord import app_commands
 import asyncio
@@ -12,12 +12,17 @@ intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-openai.api_key = Config.openai_key
 
 speech_config = speechsdk.SpeechConfig(subscription=Config.azure_key, region='eastus')
 
 
 GUILD_ID = Config.guild_id
+
+character_type = Literal[tuple(characters.keys())]
+
+ai_client = AsyncOpenAI(
+    api_key= Config.openai_key
+)
 
 @tree.command(name = "test", description = "Play a test sound in your voice channel", guild=GUILD_ID)
 async def first_command(interaction):
@@ -59,7 +64,7 @@ async def say(interaction, text: str):
 
 
 @tree.command(name='ask', description = 'Ask a question', guild=GUILD_ID)
-async def ask(interaction, character: Literal[*characters.keys()],  text: str):
+async def ask(interaction, character: character_type, text: str):
     message_text = "User input (to " + character + "): " + text
     base_message = message_text
     await interaction.response.defer()
@@ -71,24 +76,21 @@ async def ask(interaction, character: Literal[*characters.keys()],  text: str):
         return
 
 
-
-
     character_details = characters[character]
     memory = character_details['memory']
 
     message_text = base_message + "\n\nwriting..."
     await discord_message2.edit(content=message_text)
 
-    msg = openai.ChatCompletion.create(
-    model="gpt-3.5-turbo",
-    messages=[
+    msg = await ai_client.chat.completions.create(
+        messages=[
             {"role": "system", "content": character_details["prompt"]},
             *memory,
             {"role": "user", "content": text},
-        ]
+        ],
+         model="gpt-4o",
     )
-    msg = msg["choices"][0]["message"]["content"]
-
+    msg = msg.choices[0].message.content
 
     if not interaction.user.voice:
         message_text = message_text + "\n\nNo voice to connect to...\n\n" + msg
@@ -143,14 +145,14 @@ async def ask(interaction, character: Literal[*characters.keys()],  text: str):
 
 
 @tree.command(name='refresh', description = 'Wipe a characters memory', guild=GUILD_ID)
-async def ask(interaction, character: Literal[*characters.keys()]):
+async def ask(interaction, character: character_type):
     await interaction.response.send_message("Wiping their memory!", ephemeral=True)
 
     characters[character]['memory'] = []
 
 
 @tree.command(name='character', description='Show a single character\'s blurb', guild=GUILD_ID)
-async def single_character(interaction, character: Literal[*characters.keys()]):
+async def single_character(interaction, character: character_type):
     message = character + '\n' + characters[character]["prompt"]
     await interaction.response.send_message(message, ephemeral=True)
 

@@ -4,3 +4,4 @@ env/
 __pycache__/
 temp.wav
 test.mp3
+clear.py
