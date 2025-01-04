@@ -125,6 +125,8 @@ async def ask(interaction, character: character_type, text: str):
     await vc.disconnect()
 
     message_text = base_message + "\n\nResponse (" + character + "): " + msg
+    if len(message_text) > 2000:
+        message_text = message_text[:2000]
     await discord_message2.edit(content=message_text)
 
     to_add = [
