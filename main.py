@@ -146,6 +146,80 @@ async def ask(interaction, character: character_type, text: str):
     print(memory)
 
 
+@tree.command(name='convo', description='Have characters start a conversation.',guild=GUILD_ID)
+async def convo(interaction, character1: character_type, character2: character_type, topic: str):
+    message_text = "Starting conversation between " + character1 + " and " +  character2 + "\nabout: " + topic
+    base_message = message_text
+    await interaction.response.defer()
+    discord_message2 =  await interaction.followup.send(content=message_text, wait=True)
+
+    if not character1 in characters.keys() or not character2 in characters.keys():
+        print('bad character name')
+        return
+
+
+    character1_details = characters[character1]
+    character2_details = characters[character2]
+
+    system_message = "There are two characters having a heated debate between each other about " + topic + ". Keep your conversations short, 2-3 sentances max. Only reply as one person and wait for a response. This is your character description: " # fill this in during the loop.
+    current_character = 2
+
+    if not interaction.user.voice:
+        message_text = message_text + "\n\nNo voice to connect to...\n\n"
+        await discord_message2.edit(content=message_text)
+
+        return
+    if len(client.voice_clients) > 0:
+        message_text = message_text + "\n\nwaiting for other conversations..."
+        await discord_message2.edit(content=message_text)
+
+        while(len(client.voice_clients)> 0):
+            await asyncio.sleep(1)
+
+    memory = []
+    def convert_roles(val):
+        return {"content": val['content'], "role": "user" if val['role'] == current_character else "system"}
+    vc = await interaction.user.voice.channel.connect()
+
+    while len(memory) < 5: # max length here eventually
+        speech_config.speech_synthesis_voice_name = character2_details['voice'] if current_character == 1 else character1_details['voice']
+
+        new_message = system_message + character1_details['prompt'] if current_character == 1 else character2_details['prompt']
+        new_message = system_message + '\n The user you are responding to is' + character2_details['prompt'] if current_character == 1 else character1_details['prompt']
+        print(new_message)
+        msg = await ai_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": new_message},
+                *map(convert_roles, memory),
+            ],
+            model="gpt-4o",
+        )
+        msg = msg.choices[0].message.content
+        memory = memory + [{
+            'role': current_character,
+            'content': msg
+        }]
+
+        message_text = '[' +  (character2 if current_character == 1 else character1) + ']: ' + msg
+        await interaction.followup.send(content=message_text)
+
+        current_character = 1 if current_character == 2 else 2
+
+        print(memory)
+        print(speech_config.speech_synthesis_voice_name)
+
+
+        speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+        result = speech_synthesizer.speak_text(msg)
+        stream = speechsdk.AudioDataStream(result)
+        stream.save_to_wav_file('temp.wav')
+
+        vc.play(discord.FFmpegPCMAudio('temp.wav'))
+        while vc.is_playing():
+            await asyncio.sleep(1)
+
+    await vc.disconnect()
+
 @tree.command(name='refresh', description = 'Wipe a characters memory', guild=GUILD_ID)
 async def ask(interaction, character: character_type):
     await interaction.response.send_message("Wiping their memory!", ephemeral=True)
