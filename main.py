@@ -161,8 +161,8 @@ async def convo(interaction, character1: character_type, character2: character_t
     character1_details = characters[character1]
     character2_details = characters[character2]
 
-    system_message = "There are two characters having a heated debate between each other about " + topic + ". Keep your conversations short, 2-3 sentances max. Only reply as one person and wait for a response. This is your character description: " # fill this in during the loop.
-    current_character = 2
+    system_message = "You are having a heated debate with the user about " + topic + ". Keep your conversations short, 2-3 sentances max. Only reply as one person and wait for a response. Make sure to keep your response to one paragraph at most. No multiple paragraphs, only one maybe two paragraphs. Don't end the conversation, keep it going as long as possible. Refer to the other person by their name. Your name is " # fill this in during the loop.
+    current_character = 1
 
     if not interaction.user.voice:
         message_text = message_text + "\n\nNo voice to connect to...\n\n"
@@ -182,10 +182,28 @@ async def convo(interaction, character1: character_type, character2: character_t
     vc = await interaction.user.voice.channel.connect()
 
     while len(memory) < 5: # max length here eventually
-        speech_config.speech_synthesis_voice_name = character2_details['voice'] if current_character == 1 else character1_details['voice']
 
-        new_message = system_message + character1_details['prompt'] if current_character == 1 else character2_details['prompt']
-        new_message = system_message + '\n The user you are responding to is' + character2_details['prompt'] if current_character == 1 else character1_details['prompt']
+        current_character_details = None
+        other_character_details = None
+        current_name = None
+        other_name = None
+
+        if current_character == 1:
+            current_character_details = character1_details
+            other_character_details = character2_details
+            current_name = character1
+            other_name = character2
+        else:
+            current_character_details = character2_details
+            other_character_details = character1_details
+            current_name = character2
+            other_name = character1
+
+        new_message = system_message + current_name + ' and your character description is ' + (current_character_details['prompt'])
+        new_message = new_message + '\n The user you are responding to is' + other_name + "who's character description is " + other_character_details['prompt']
+        speech_config.speech_synthesis_voice_name = current_character_details['voice']
+        if len(memory) == 0:
+            new_message = new_message + '\n You are starting the conversation.'
         print(new_message)
         msg = await ai_client.chat.completions.create(
             messages=[
@@ -200,10 +218,12 @@ async def convo(interaction, character1: character_type, character2: character_t
             'content': msg
         }]
 
-        message_text = '[' +  (character2 if current_character == 1 else character1) + ']: ' + msg
+        message_text = '[' +  (current_name) + ']: ' + msg
         await interaction.followup.send(content=message_text)
-
-        current_character = 1 if current_character == 2 else 2
+        if current_character == 1:
+            current_character = 2
+        else:
+            current_character = 1
 
         print(memory)
         print(speech_config.speech_synthesis_voice_name)
